@@ -1,6 +1,9 @@
+#include <algorithm>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <ratio>
+#include <string>
 #include <vector>
 
 using namespace std;
@@ -8,6 +11,43 @@ using namespace std;
 #define system_size 64 // 2048 біт / 32 = 64 слів
 #define WORD_BITS 32
 #define WORD_MASK 0xFFFFFFFFu
+
+string DecimalToHex(string decimal) {
+    if (decimal.empty())
+        return "";
+    if (decimal == "0")
+        return "0";
+
+    string hex = "";
+    string current = decimal;
+
+    while (current != "" && current != "0") {
+        int remainder = 0;
+        string quotient = "";
+        bool leading_zeros = true;
+        for (char c : current) {
+            int digit = c - '0';
+            int val = remainder * 10 + digit;
+            int q = val / 16;
+            remainder = val % 16;
+            if (q != 0)
+                leading_zeros = false;
+            if (!leading_zeros) {
+                quotient += (char)(q + '0');
+            }
+        }
+
+        if (remainder < 10)
+            hex += (char)(remainder + '0');
+        else
+            hex += (char)(remainder - 10 + 'A');
+        current = quotient;
+    }
+
+    reverse(hex.begin(), hex.end());
+
+    return hex.empty() ? "0" : hex;
+}
 
 class BigInt {
     public:
@@ -40,6 +80,8 @@ class BigInt {
             }
         }
 
+        BigInt(int n)
+            : BigInt(DecimalToHex(to_string(n))) {}
         BigInt(const std::string &hex_input) {
             // Очистити масив
             for (int i = 0; i < system_size; i++)
@@ -180,9 +222,9 @@ class BigInt {
                     borrow = 1;
                 }
             }
-            if (borrow != 0) {
-                cerr << "ERROR: subtraction resulted in negative number\n";
-            }
+            /* if (borrow != 0) {
+                 cerr << "ERROR: subtraction resulted in negative number\n";
+             }*/
             return C;
         }
 
@@ -202,8 +244,15 @@ class BigInt {
         bool operator<(const BigInt &B) const { return Cmp(B) < 0; }
         bool operator>(const BigInt &B) const { return Cmp(B) > 0; }
         bool operator==(const BigInt &B) const { return Cmp(B) == 0; }
+        bool operator!=(const BigInt &B) const {
+            if (Cmp(B) == 0) {
+                return 0;
+            } else {
+                return 1;
+            }
+        }
 
-        BigInt LongMulOneDigit(const BigInt &A, uint32_t b) {
+        BigInt static LongMulOneDigit(const BigInt &A, uint32_t b) {
             BigInt C;
             uint64_t carry = 0;
 
@@ -217,7 +266,7 @@ class BigInt {
             return C;
         }
 
-        void LongShiftDigitsToHigh(BigInt &X, int shift) {
+        void LongShiftDigitsToHigh(BigInt &X, int shift) const {
             if (shift == 0)
                 return;
 
@@ -229,7 +278,7 @@ class BigInt {
             }
         }
 
-        BigInt LongMul(const BigInt &A, const BigInt &B) {
+        BigInt LongMul(const BigInt &A, const BigInt &B) const {
             BigInt C;
 
             for (int i = 0; i < system_size; i++) {
@@ -241,11 +290,18 @@ class BigInt {
 
             return C;
         }
-        BigInt operator*(BigInt &B) {
+        BigInt operator*(const BigInt &B) const {
             BigInt C;
             C = LongMul(*this, B);
             return C;
         }
+        BigInt operator*(int n) const {
+            BigInt C;
+            BigInt B = BigInt(n);
+            C = LongMul(*this, B);
+            return C;
+        }
+
         BigInt LongShiftBitsToHigh(const BigInt &X, int shiftBits) {
             BigInt R;
 
@@ -307,6 +363,37 @@ class BigInt {
             }
         }
 
+        BigInt operator/(BigInt &B) {
+            BigInt Q, R;
+
+            if (B == BigInt()) {
+                cerr << "ERROR: Division by zero" << endl;
+                return BigInt();
+            }
+            BigInt tool;
+            tool.LongDivMod(*this, B, Q, R);
+
+            return Q;
+        }
+        BigInt operator/(int n) {
+            BigInt temp = BigInt(DecimalToHex(to_string(n)));
+            return *this / temp;
+        }
+
+        BigInt operator%(BigInt &B) {
+            BigInt Q, R;
+
+            if (B == BigInt()) {
+                cerr << "ERROR: Modulo by zero" << endl;
+                return BigInt();
+            }
+
+            BigInt tool;
+            tool.LongDivMod(*this, B, Q, R);
+
+            return R;
+        }
+
         int GetBit(int bitnum) const {
             if (bitnum < 0 || bitnum >= WORD_BITS * system_size) {
                 return -1;
@@ -342,73 +429,98 @@ class BigInt {
             }
             return C;
         }
+
+        BigInt min(const BigInt &A, const BigInt &B) const {
+            if (A < B) {
+                return A;
+            } else {
+                return B;
+            }
+        }
+        BigInt static BinaryAlg(const BigInt &Asource, const BigInt &Bsource) {
+            BigInt A = Asource;
+            BigInt B = Bsource;
+            BigInt D = BigInt(1);
+            while (A.GetBit(0) == 0 && B.GetBit(0) == 0) {
+                A = A / 2;
+                B = B / 2;
+                D = D * 2;
+            }
+            while (A.GetBit(0) == 0) {
+                A = A / 2;
+            }
+            while (B != BigInt()) {
+                while (B.GetBit(0) == 0) {
+                    B = B / 2;
+                }
+                if (A > B) {
+                    BigInt temp = A;
+                    A = B;
+                    B = temp;
+                }
+
+                B = B - A;
+            }
+            D = D * A;
+            return D;
+        }
 };
 
 int main() {
-    /*    BigInt A = BigInt();
-        A.Print();
 
-        vector<uint32_t> Bbits{62, 0xA, 0, 0x1};
-        BigInt B = BigInt(Bbits);
-        B.Print();
-        BigInt C = BigInt();
-        A = BigInt({0, 1});
-        A.Print();
-        int k = A > B;
-        cout << k << endl;
-        C = B - A;
+    /*LAB 1
+     * BigInt
+      A("96f4021949887b8a63f4da2ad78c1cd023da79a3eb26870f2315dd92d817afee6"
+               "a49da7f35686e3bcb4d8af86f148744d971adbf1ca01c0df2759e107e41f45d7b"
+               "81d42f03ffe8b9182cddebe48f47e2376ca2ace553fc772d977bfcbeb1e205331"
+               "a66cb11f344a7190858411483c4be250eb7546ace290bc25c799d24f86f3c");
+      BigInt
+      B("b28d6a12c10483fd0e5e05b2ea4c34a54a946750019a5a2f327cc19ba598bd6ea"
+               "fcec153670fa75109d9efdd2363a85c1d4bd9d77a1670875d12d92c3ab8ab42b9"
+               "8d174f0a3ca2dc7043d46eecb662308ae953090d545ce49945bf18d462c034884"
+               "12c1c2fc360d2575d532d1dfb86706e7dd256bb131795ec01bd26fdf8b1ab");
 
-        C.Print();
+      cout << "A = ";
+      A.Print();
 
-        int b = 5;
-        BigInt D = BigInt();
-        D = D.LongMulOneDigit(A, b);
-        D.Print();
-        A = BigInt({30, 7, 61, 6});
-        D = D.LongMul(A, B);
-        D.Print();
-        cout << "==================================================\n";
+      cout << "B = ";
+      B.Print();
 
-    */
+      BigInt S = A + B;
+      cout << "A + B = ";
+      S.Print();
 
-    BigInt A("aaaaffffff25534678765143534fff");
-    BigInt B("15");
+      BigInt D = A - B;
+      cout << "A - B = ";
+      D.Print();
 
-    cout << "A = ";
-    A.Print();
+      BigInt M;
+      M = M.LongMul(A, B);
+      cout << "A * B = ";
+      M.Print();
 
-    cout << "B = ";
-    B.Print();
-
-    BigInt S = A + B;
-    cout << "A + B = ";
-    S.Print();
-
-    BigInt D = A - B;
-    cout << "A - B = ";
-    D.Print();
-
-    BigInt M;
-    M = M.LongMul(A, B);
-    cout << "A * B = ";
-    M.Print();
-
-    BigInt Q, R;
-    Q.LongDivMod(A, B, Q, R);
-    cout << "A / B = ";
-    Q.Print();
-    cout << "A % B = ";
-    R.Print();
-
-    BigInt L;
-    L = L.Gorner(A, B);
-    cout << "A ^ B = ";
-    L.Print();
-    BigInt L1;
-    L1 = L1.Gorner(A, 5);
-    cout << "A ^ 5 = ";
-    L1.Print();
-    //  for (int i = 0; i < 64; i++)
+      BigInt Q, R;
+      Q.LongDivMod(A, B, Q, R);
+      cout << "A / B = ";
+      Q.Print();
+      cout << "A % B = ";
+      R.Print();
+  */
+    /*  BigInt L;
+      L = L.Gorner(A, B);
+      cout << "A ^ B = ";
+      L.Print();
+      BigInt L1;
+      L1 = L1.Gorner(A, 5);
+      cout << "A ^ 5 = ";
+      L1.Print();
+     */ //  for (int i = 0; i < 64; i++)
     //    cout << M.GetBit(i) << endl;
+    BigInt A = BigInt(90);
+    A.Print();
+    BigInt B = BigInt(90);
+    B.Print();
+    BigInt d = A.BinaryAlg(A, B);
+    d.Print();
     return 0;
 }
