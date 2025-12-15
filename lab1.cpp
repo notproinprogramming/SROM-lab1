@@ -251,6 +251,12 @@ class BigInt {
                 return 1;
             }
         }
+        bool operator>=(const BigInt &B) const {
+            if (*this > B && *this == B)
+                return 1;
+            else
+                return 0;
+        }
 
         BigInt static LongMulOneDigit(const BigInt &A, uint32_t b) {
             BigInt C;
@@ -302,7 +308,7 @@ class BigInt {
             return C;
         }
 
-        BigInt LongShiftBitsToHigh(const BigInt &X, int shiftBits) {
+        BigInt static LongShiftBitsToHigh(const BigInt &X, int shiftBits) {
             BigInt R;
 
             int wordShift = shiftBits / 32;
@@ -329,7 +335,33 @@ class BigInt {
             return R;
         }
 
-        int BitLength(const BigInt &X) {
+        BigInt static LongShiftBitsToLow(const BigInt &X, int shiftBits) {
+            BigInt R;
+
+            int wordShift = shiftBits / 32;
+            int bitShift = shiftBits % 32;
+
+            for (int i = 0; i < system_size - wordShift; i++) {
+                R.a[i] = X.a[i + wordShift];
+            }
+            for (int i = system_size - wordShift; i < system_size; i++) {
+                R.a[i] = 0;
+            }
+
+            if (bitShift > 0) {
+                uint32_t carry = 0;
+                for (int i = system_size - 1; i >= 0; i--) {
+                    uint32_t current_word = R.a[i];
+                    R.a[i] =
+                        (current_word >> bitShift) | (carry << (32 - bitShift));
+                    carry = current_word & ((1u << bitShift) - 1);
+                }
+            }
+
+            return R;
+        }
+
+        int static BitLength(const BigInt &X) {
             for (int i = system_size - 1; i >= 0; i--) {
                 if (X.a[i] != 0) {
                     return i * 32 + (32 - __builtin_clz(X.a[i]));
@@ -363,7 +395,7 @@ class BigInt {
             }
         }
 
-        BigInt operator/(BigInt &B) {
+        BigInt operator/(const BigInt &B) const {
             BigInt Q, R;
 
             if (B == BigInt()) {
@@ -464,63 +496,140 @@ class BigInt {
             D = D * A;
             return D;
         }
+
+        BigInt static LCM(const BigInt &A, const BigInt &B) {
+            if (A == BigInt() || B == BigInt()) {
+                return BigInt();
+            }
+
+            BigInt gcd = BinaryAlg(A, B);
+
+            BigInt temp = A / gcd;
+            BigInt lcm = temp * B;
+
+            return lcm;
+        }
+
+        static BigInt BarrettMu(const BigInt &n) {
+            int k = BitLength(n);
+
+            // 2^(2k)
+            BigInt twoPow2k;
+            twoPow2k.a[(2 * k) / WORD_BITS] = 1u << ((2 * k) % WORD_BITS);
+
+            BigInt mu = twoPow2k / n;
+            return mu;
+        }
+
+        static BigInt BarrettReduction(const BigInt &x, const BigInt &n,
+                                       const BigInt &mu) {
+            int k = BitLength(n);
+
+            BigInt q1 = LongShiftBitsToLow(x, k - 1);
+            BigInt q2 = q1 * mu;
+            BigInt q3 = LongShiftBitsToLow(q2, k + 1);
+
+            BigInt r = x - (q3 * n);
+
+            while (r >= n)
+                r = r - n;
+            while (r < BigInt())
+                r = r + n;
+
+            return r;
+        }
+
+        BigInt ModBarrett(const BigInt &n, const BigInt &mu) const {
+            return BarrettReduction(*this, n, mu);
+        }
 };
 
 int main() {
 
-    /*LAB 1
-     * BigInt
-      A("96f4021949887b8a63f4da2ad78c1cd023da79a3eb26870f2315dd92d817afee6"
-               "a49da7f35686e3bcb4d8af86f148744d971adbf1ca01c0df2759e107e41f45d7b"
-               "81d42f03ffe8b9182cddebe48f47e2376ca2ace553fc772d977bfcbeb1e205331"
-               "a66cb11f344a7190858411483c4be250eb7546ace290bc25c799d24f86f3c");
-      BigInt
-      B("b28d6a12c10483fd0e5e05b2ea4c34a54a946750019a5a2f327cc19ba598bd6ea"
-               "fcec153670fa75109d9efdd2363a85c1d4bd9d77a1670875d12d92c3ab8ab42b9"
-               "8d174f0a3ca2dc7043d46eecb662308ae953090d545ce49945bf18d462c034884"
-               "12c1c2fc360d2575d532d1dfb86706e7dd256bb131795ec01bd26fdf8b1ab");
+    BigInt A("96f4021949887b8a63f4da2ad78c1cd023da79a3eb26870f2315dd92d817afee6"
+             "a49da7f35686e3bcb4d8af86f148744d971adbf1ca01c0df2759e107e41f45d7b"
+             "81d42f03ffe8b9182cddebe48f47e2376ca2ace553fc772d977bfcbeb1e205331"
+             "a66cb11f344a7190858411483c4be250eb7546ace290bc25c799d24f86f3c");
+    BigInt B("b28d6a12c10483fd0e5e05b2ea4c34a54a946750019a5a2f327cc19ba598bd6ea"
+             "fcec153670fa75109d9efdd2363a85c1d4bd9d77a1670875d12d92c3ab8ab42b9"
+             "8d174f0a3ca2dc7043d46eecb662308ae953090d545ce49945bf18d462c034884"
+             "12c1c2fc360d2575d532d1dfb86706e7dd256bb131795ec01bd26fdf8b1ab");
 
-      cout << "A = ";
-      A.Print();
+    cout << "A = ";
+    A.Print();
 
-      cout << "B = ";
-      B.Print();
+    cout << "B = ";
+    B.Print();
 
-      BigInt S = A + B;
-      cout << "A + B = ";
-      S.Print();
+    BigInt n(
+        "96f4021949887b8a63f4da2ad78c1cd023da79a3eb26870f2315dd92d817afee6"
+        "a49da7f35686e3bcb4d8af86f148744d971adbf1ca01c0df2759e107e41f45d7b"
+        "81d42f03ffe8b9182cddebe48f47e2376ca2ace553fc772d977bfcbeb1e20533");
+    cout << "n = ";
+    n.Print();
+    BigInt mu = BigInt::BarrettMu(n);
 
-      BigInt D = A - B;
-      cout << "A - B = ";
-      D.Print();
+    cout << "mu = ";
+    mu.Print();
 
-      BigInt M;
-      M = M.LongMul(A, B);
-      cout << "A * B = ";
-      M.Print();
+    BigInt S = A + B;
+    cout << "A + B = ";
+    S.Print();
+    BigInt res = S.ModBarrett(n, mu);
+    cout << "A + B mod n = ";
+    res.Print();
 
-      BigInt Q, R;
-      Q.LongDivMod(A, B, Q, R);
-      cout << "A / B = ";
-      Q.Print();
-      cout << "A % B = ";
-      R.Print();
-  */
-    /*  BigInt L;
-      L = L.Gorner(A, B);
-      cout << "A ^ B = ";
-      L.Print();
-      BigInt L1;
-      L1 = L1.Gorner(A, 5);
-      cout << "A ^ 5 = ";
-      L1.Print();
-     */ //  for (int i = 0; i < 64; i++)
-    //    cout << M.GetBit(i) << endl;
-    BigInt A = BigInt(90);
+    BigInt D = A - B;
+    cout << "A - B = ";
+    D.Print();
+    res = D.ModBarrett(n, mu);
+    cout << "A - B mod n = ";
+    res.Print();
+
+    BigInt M;
+    M = M.LongMul(A, B);
+    cout << "A * B = ";
+    M.Print();
+    res = M.ModBarrett(n, mu);
+    cout << "A * B mod n = ";
+    res.Print();
+
+    BigInt Q, R;
+    Q.LongDivMod(A, B, Q, R);
+    cout << "A / B = ";
+    Q.Print();
+    cout << "A % B = ";
+    R.Print();
+
+    BigInt L;
+    L = L.Gorner(A, B);
+    cout << "A ^ B = ";
+    L.Print();
+    BigInt L1;
+    res = L.ModBarrett(n, mu);
+    cout << "A ^ B mod n = ";
+    res.Print();
+
+    L1 = L1.Gorner(A, 2);
+    cout << "A ^ 2 = ";
+    L1.Print();
+    res = L1.ModBarrett(n, mu);
+    cout << "A ^ 2 mod n = ";
+    res.Print();
+
+    /*BigInt A = BigInt(90);
     A.Print();
     BigInt B = BigInt(90);
     B.Print();
-    BigInt d = A.BinaryAlg(A, B);
+    BigInt d = BigInt::BinaryAlg(A, B);
     d.Print();
+
+    BigInt lcm = BigInt::LCM(A, B);
+
+    cout << "LCM = ";
+    lcm.Print();
+
+    */
+
     return 0;
 }
