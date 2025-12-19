@@ -542,6 +542,21 @@ class BigInt {
         BigInt ModBarrett(const BigInt &n, const BigInt &mu) const {
             return BarrettReduction(*this, n, mu);
         }
+
+        BigInt static PowModBarrett(BigInt A, BigInt B, const BigInt &n,
+                                    const BigInt &mu) {
+            BigInt C(1);
+
+            A = BarrettReduction(A, n, mu);
+
+            for (int i = 0; i < BitLength(B); i++) {
+                if (B.GetBit(i) == 1) {
+                    C = BarrettReduction(C * A, n, mu);
+                }
+                A = BarrettReduction(A * A, n, mu);
+            }
+            return C;
+        }
 };
 
 int main() {
@@ -575,14 +590,14 @@ int main() {
     BigInt S = A + B;
     cout << "A + B = ";
     S.Print();
-    BigInt res = S.ModBarrett(n, mu);
+    BigInt res = S % n;
     cout << "A + B mod n = ";
     res.Print();
 
     BigInt D = A - B;
     cout << "A - B = ";
     D.Print();
-    res = D.ModBarrett(n, mu);
+    res = D % n;
     cout << "A - B mod n = ";
     res.Print();
 
@@ -590,7 +605,7 @@ int main() {
     M = M.LongMul(A, B);
     cout << "A * B = ";
     M.Print();
-    res = M.ModBarrett(n, mu);
+    res = M % n;
     cout << "A * B mod n = ";
     res.Print();
 
@@ -601,35 +616,31 @@ int main() {
     cout << "A % B = ";
     R.Print();
 
-    BigInt L;
-    L = L.Gorner(A, B);
-    cout << "A ^ B = ";
-    L.Print();
-    BigInt L1;
-    res = L.ModBarrett(n, mu);
+    /* BigInt L;
+     L = L.Gorner(A, B);
+     cout << "A ^ B = ";
+     L.Print();
+    */
+    res = BigInt::PowModBarrett(A, B, n, mu);
     cout << "A ^ B mod n = ";
     res.Print();
 
+    BigInt L1;
     L1 = L1.Gorner(A, 2);
     cout << "A ^ 2 = ";
     L1.Print();
-    res = L1.ModBarrett(n, mu);
+    res = L1 % n;
     cout << "A ^ 2 mod n = ";
     res.Print();
 
-    /*BigInt A = BigInt(90);
-    A.Print();
-    BigInt B = BigInt(90);
-    B.Print();
     BigInt d = BigInt::BinaryAlg(A, B);
+    cout << "GCD = ";
     d.Print();
 
     BigInt lcm = BigInt::LCM(A, B);
 
     cout << "LCM = ";
     lcm.Print();
-
-    */
 
     return 0;
 }
